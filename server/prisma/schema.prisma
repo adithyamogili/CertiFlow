@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  TRAINING_CENTRE
+  DISTRICT_OFFICER
+  QUALITY_TEAM
+  STATE_OFFICE
+}
+
+enum BatchStatus {
+  DRAFT
+  SUBMITTED
+  DISTRICT_APPROVED
+  QUALITY_REVIEW
+  STATE_APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum ApprovalLevel {
+  DISTRICT
+  QUALITY
+  STATE
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum CertificateStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole
+  districtId   String?
+  createdAt    DateTime @default(now())
+
+  createdBatches Batch[]    @relation("BatchCentre")
+  approvals      Approval[]
+  auditLogs      AuditLog[]
+}
+
+model Batch {
+  id             String      @id @default(cuid())
+  name           String
+  status         BatchStatus @default(DRAFT)
+  candidateCount Int         @default(0)
+  centreId       String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  centre     User        @relation("BatchCentre", fields: [centreId], references: [id])
+  candidates Candidate[]
+  approvals  Approval[]
+  auditLogs  AuditLog[]
+}
+
+model Candidate {
+  id         String   @id @default(cuid())
+  batchId    String
+  externalId String
+  name       String
+  email      String?
+  phone      String
+  createdAt  DateTime @default(now())
+
+  batch       Batch        @relation(fields: [batchId], references: [id])
+  certificate Certificate?
+
+  @@unique([batchId, externalId])
+}
+
+model Approval {
+  id        String           @id @default(cuid())
+  batchId   String
+  officerId String
+  level     ApprovalLevel
+  decision  ApprovalDecision
+  remarks   String?
+  createdAt DateTime         @default(now())
+
+  batch   Batch @relation(fields: [batchId], references: [id])
+  officer User  @relation(fields: [officerId], references: [id])
+
+  @@unique([batchId, officerId, level])
+}
+
+model Certificate {
+  id                String            @id @default(cuid())
+  candidateId       String            @unique
+  certificateNumber String            @unique
+  verificationCode  String            @unique
+  status            CertificateStatus @default(ACTIVE)
+  issuedAt          DateTime          @default(now())
+  cancelledAt       DateTime?
+
+  candidate    Candidate     @relation(fields: [candidateId], references: [id])
+  notification Notification?
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  batchId   String?
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+
+  user  User?  @relation(fields: [userId], references: [id])
+  batch Batch? @relation(fields: [batchId], references: [id])
+}
+
+model Notification {
+  id            String             @id @default(cuid())
+  certificateId String             @unique
+  status        NotificationStatus @default(PENDING)
+  attempts      Int                @default(0)
+  lastError     String?
+  sentAt        DateTime?
+  createdAt     DateTime           @default(now())
+
+  certificate Certificate @relation(fields: [certificateId], references: [id])
+}
